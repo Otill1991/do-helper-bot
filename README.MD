@@ -1,7 +1,5 @@
 # ☁ `cloud-helper-bot`
 
-![](.README.MD_images/1be8fb97.png)
-
 ### 🚚 Manage Cloud Service Accounts with a Telegram Bot
 
 ### 🔖 Key Features
