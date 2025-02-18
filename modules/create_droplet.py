@@ -337,7 +337,10 @@ def confirm_create(call: CallbackQuery, data: dict):
 
 def quick_create_droplet(call: CallbackQuery, data: dict):
     doc_id = data['doc_id'][0]
+    size = data.get('size', ['s-1vcpu-1gb'])[0]  # 默认1核1G
+    
     account = AccountsDB().get(doc_id=doc_id)
+    t = '<b>快速创建实例</b>\n\n'
     
     bot.edit_message_text(
         text=f'{t}获取地区中...',
@@ -367,7 +370,7 @@ def quick_create_droplet(call: CallbackQuery, data: dict):
             text=f'{t}正在创建实例...\n'
                  f'账号: <code>{account["email"]}</code>\n'
                  f'地区: <code>{localize_region(selected_region)}</code>\n'
-                 f'型号: <code>s-1vcpu-1gb-35gb-intel</code>',
+                 f'型号: <code>{size}</code>',
             chat_id=call.from_user.id,
             message_id=call.message.message_id,
             parse_mode='HTML'
@@ -378,7 +381,7 @@ def quick_create_droplet(call: CallbackQuery, data: dict):
             name=f'quick-{selected_region}-{random.randint(1000, 9999)}',
             region=selected_region,
             image='debian-12-x64',
-            size_slug='s-1vcpu-1gb-35gb-intel',
+            size_slug=size,
             user_data=set_root_password_script(password)
         )
         droplet.create()
@@ -412,7 +415,7 @@ def quick_create_droplet(call: CallbackQuery, data: dict):
         status_text = f'{t}实例创建完成\n' \
                      f'账号: <code>{account["email"]}</code>\n' \
                      f'地区: <code>{localize_region(selected_region)}</code>\n' \
-                     f'型号: <code>s-1vcpu-1gb-35gb-intel</code>\n' \
+                     f'型号: <code>{size}</code>\n' \
                      f'密码: <code>{password}</code>'
         
         if ip_address:

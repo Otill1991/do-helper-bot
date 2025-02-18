@@ -76,10 +76,16 @@ def list_droplets(call: CallbackQuery, data: dict):
             InlineKeyboardButton(
                 text='创建实例',
                 callback_data=f'create_droplet?nf=select_region&doc_id={account.doc_id}'
-            ),
+            )
+        )
+        markup.row(
             InlineKeyboardButton(
                 text='快速创建1核1G',
-                callback_data=f'quick_create_droplet?doc_id={account.doc_id}'
+                callback_data=f'quick_create_droplet?doc_id={account.doc_id}&size=s-1vcpu-1gb'
+            ),
+            InlineKeyboardButton(
+                text='快速创建2核2G',
+                callback_data=f'quick_create_droplet?doc_id={account.doc_id}&size=s-2vcpu-2gb'
             )
         )
         markup.row(
@@ -116,10 +122,16 @@ def list_droplets(call: CallbackQuery, data: dict):
         InlineKeyboardButton(
             text='创建实例',
             callback_data=f'create_droplet?nf=select_region&doc_id={account.doc_id}'
-        ),
+        )
+    )
+    markup.row(
         InlineKeyboardButton(
             text='快速创建1核1G',
-            callback_data=f'quick_create_droplet?doc_id={account.doc_id}'
+            callback_data=f'quick_create_droplet?doc_id={account.doc_id}&size=s-1vcpu-1gb'
+        ),
+        InlineKeyboardButton(
+            text='快速创建2核2G',
+            callback_data=f'quick_create_droplet?doc_id={account.doc_id}&size=s-2vcpu-2gb'
         )
     )
     
