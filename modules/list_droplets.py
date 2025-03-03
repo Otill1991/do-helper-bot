@@ -14,8 +14,37 @@ from utils.localizer import localize_region
 
 def delete_account_droplets(call: CallbackQuery, data: dict):
     doc_id = data['doc_id'][0]
+    step = int(data.get('step', [1])[0])
     account = AccountsDB().get(doc_id=doc_id)
     t = '<b>删除实例</b>\n\n'
+    
+    if step < 3:
+        remaining_clicks = 3 - step
+        markup = InlineKeyboardMarkup()
+        markup.row(
+            InlineKeyboardButton(
+                text=f'确认删除 (还需点击 {remaining_clicks} 次)',
+                callback_data=f'delete_account_droplets?doc_id={doc_id}&step={step + 1}'
+            )
+        )
+        markup.row(
+            InlineKeyboardButton(
+                text='取消',
+                callback_data=f'list_droplets?doc_id={doc_id}'
+            )
+        )
+        
+        bot.edit_message_text(
+            text=f'{t}⚠️ 危险操作 ⚠️\n'
+                 f'您确定要删除账号 <code>{account["email"]}</code> 的所有实例吗？\n'
+                 f'此操作不可撤销！\n'
+                 f'还需点击 {remaining_clicks} 次以确认。',
+            chat_id=call.from_user.id,
+            message_id=call.message.message_id,
+            parse_mode='HTML',
+            reply_markup=markup
+        )
+        return
     
     bot.edit_message_text(
         text=f'{t}正在删除实例...\n'
@@ -138,7 +167,7 @@ def list_droplets(call: CallbackQuery, data: dict):
     markup.row(
         InlineKeyboardButton(
             text='删除所有实例',
-            callback_data=f'delete_account_droplets?doc_id={account.doc_id}'
+            callback_data=f'delete_account_droplets?doc_id={account.doc_id}&step=1'
         )
     )
     
