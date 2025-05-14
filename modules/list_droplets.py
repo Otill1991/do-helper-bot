@@ -109,6 +109,10 @@ def list_droplets(call: CallbackQuery, data: dict):
         )
         markup.row(
             InlineKeyboardButton(
+                text='快速创建1核512M',
+                callback_data=f'quick_create_droplet?doc_id={account.doc_id}&size=s-1vcpu-512mb-10gb'
+            ),
+            InlineKeyboardButton(
                 text='快速创建1核1G',
                 callback_data=f'quick_create_droplet?doc_id={account.doc_id}&size=s-1vcpu-1gb'
             ),
