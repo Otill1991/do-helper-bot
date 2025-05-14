@@ -10,8 +10,14 @@ def parse_config():
 
 def start_bot():
     from bot import bot
+    import time
 
-    bot.polling(none_stop=True)
+    while True:
+        try:
+            bot.polling(none_stop=True)
+        except Exception:
+            time.sleep(15)
+            continue
 
 
 if __name__ == '__main__':
