@@ -15,14 +15,18 @@ from utils.localizer import localize_region
 def delete_account_droplets(call: CallbackQuery, data: dict):
     doc_id = data['doc_id'][0]
     step = int(data.get('step', [1])[0])
-    pattern = data.get('pattern', None)  # Get pattern from callback data
-    pattern = pattern[0] if pattern is not None else None  # Convert to string if exists
+    pattern = data.get('pattern', [''])[0]
     account = AccountsDB().get(doc_id=doc_id)
     t = '<b>删除实例</b>\n\n'
     
-    if step == 1 and pattern == '':
-        # First step: Ask for pattern
+    if step == 1:
         markup = InlineKeyboardMarkup()
+        markup.row(
+            InlineKeyboardButton(
+                text='输入匹配模式',
+                callback_data=f'input_delete_pattern?doc_id={doc_id}'
+            )
+        )
         markup.row(
             InlineKeyboardButton(
                 text='取消',
@@ -31,9 +35,10 @@ def delete_account_droplets(call: CallbackQuery, data: dict):
         )
         
         bot.edit_message_text(
-            text=f'{t}请输入要删除的实例名称模式\n'
-                 f'支持模糊匹配，例如输入 "test" 将删除所有名称中包含 "test" 的实例\n'
-                 f'直接发送要匹配的名称即可',
+            text=f'{t}⚠️ 危险操作 ⚠️\n'
+                 f'您确定要删除账号 <code>{account["email"]}</code> 的实例吗？\n'
+                 f'此操作不可撤销！\n'
+                 f'请先输入要删除的实例名称匹配模式（使用 * 作为通配符）',
             chat_id=call.from_user.id,
             message_id=call.message.message_id,
             parse_mode='HTML',
@@ -41,13 +46,38 @@ def delete_account_droplets(call: CallbackQuery, data: dict):
         )
         return
     
-    if step < 3:
+    if step == 2:
+        if not pattern:
+            markup = InlineKeyboardMarkup()
+            markup.row(
+                InlineKeyboardButton(
+                    text='重新输入',
+                    callback_data=f'delete_account_droplets?doc_id={doc_id}&step=1'
+                )
+            )
+            markup.row(
+                InlineKeyboardButton(
+                    text='取消',
+                    callback_data=f'list_droplets?doc_id={doc_id}'
+                )
+            )
+            
+            bot.edit_message_text(
+                text=f'{t}⚠️ 错误 ⚠️\n'
+                     f'请输入有效的匹配模式！',
+                chat_id=call.from_user.id,
+                message_id=call.message.message_id,
+                parse_mode='HTML',
+                reply_markup=markup
+            )
+            return
+            
         remaining_clicks = 3 - step
         markup = InlineKeyboardMarkup()
         markup.row(
             InlineKeyboardButton(
                 text=f'确认删除 (还需点击 {remaining_clicks} 次)',
-                callback_data=f'delete_account_droplets?doc_id={doc_id}&step={step + 1}&pattern={pattern if pattern is not None else ""}'
+                callback_data=f'delete_account_droplets?doc_id={doc_id}&step={step + 1}&pattern={pattern}'
             )
         )
         markup.row(
@@ -57,12 +87,37 @@ def delete_account_droplets(call: CallbackQuery, data: dict):
             )
         )
         
-        pattern_text = f'匹配模式: {pattern}\n' if pattern else ''
-        delete_type = '匹配的' if pattern else '所有'
         bot.edit_message_text(
             text=f'{t}⚠️ 危险操作 ⚠️\n'
-                 f'您确定要删除账号 <code>{account["email"]}</code> 的{delete_type}实例吗？\n'
-                 f'{pattern_text}'
+                 f'您确定要删除账号 <code>{account["email"]}</code> 中匹配模式 <code>{pattern}</code> 的所有实例吗？\n'
+                 f'此操作不可撤销！\n'
+                 f'还需点击 {remaining_clicks} 次以确认。',
+            chat_id=call.from_user.id,
+            message_id=call.message.message_id,
+            parse_mode='HTML',
+            reply_markup=markup
+        )
+        return
+    
+    if step < 4:
+        remaining_clicks = 4 - step
+        markup = InlineKeyboardMarkup()
+        markup.row(
+            InlineKeyboardButton(
+                text=f'确认删除 (还需点击 {remaining_clicks} 次)',
+                callback_data=f'delete_account_droplets?doc_id={doc_id}&step={step + 1}&pattern={pattern}'
+            )
+        )
+        markup.row(
+            InlineKeyboardButton(
+                text='取消',
+                callback_data=f'list_droplets?doc_id={doc_id}'
+            )
+        )
+        
+        bot.edit_message_text(
+            text=f'{t}⚠️ 危险操作 ⚠️\n'
+                 f'您确定要删除账号 <code>{account["email"]}</code> 中匹配模式 <code>{pattern}</code> 的所有实例吗？\n'
                  f'此操作不可撤销！\n'
                  f'还需点击 {remaining_clicks} 次以确认。',
             chat_id=call.from_user.id,
@@ -74,7 +129,8 @@ def delete_account_droplets(call: CallbackQuery, data: dict):
     
     bot.edit_message_text(
         text=f'{t}正在删除实例...\n'
-             f'账号: <code>{account["email"]}</code>',
+             f'账号: <code>{account["email"]}</code>\n'
+             f'匹配模式: <code>{pattern}</code>',
         chat_id=call.from_user.id,
         message_id=call.message.message_id,
         parse_mode='HTML'
@@ -84,7 +140,10 @@ def delete_account_droplets(call: CallbackQuery, data: dict):
     try:
         droplets = digitalocean.Manager(token=account['token']).get_all_droplets()
         for droplet in droplets:
-            if pattern is None or pattern.lower() in droplet.name.lower():
+            # Convert pattern to regex pattern
+            import re
+            regex_pattern = pattern.replace('*', '.*')
+            if re.match(regex_pattern, droplet.name):
                 droplet.destroy()
                 total_deleted += 1
     except:
@@ -98,12 +157,10 @@ def delete_account_droplets(call: CallbackQuery, data: dict):
         )
     )
 
-    pattern_text = f'匹配模式: {pattern}\n' if pattern else ''
-    delete_type = '匹配的' if pattern else '所有'
     bot.edit_message_text(
-        text=f'{t}{pattern_text}'
-             f'已删除 {total_deleted} 个{delete_type}实例\n'
-             f'账号: <code>{account["email"]}</code>',
+        text=f'{t}已删除 {total_deleted} 个匹配的实例\n'
+             f'账号: <code>{account["email"]}</code>\n'
+             f'匹配模式: <code>{pattern}</code>',
         chat_id=call.from_user.id,
         message_id=call.message.message_id,
         parse_mode='HTML',
@@ -206,13 +263,6 @@ def list_droplets(call: CallbackQuery, data: dict):
         InlineKeyboardButton(
             text='删除所有实例',
             callback_data=f'delete_account_droplets?doc_id={account.doc_id}&step=1'
-        )
-    )
-    
-    markup.row(
-        InlineKeyboardButton(
-            text='按名称删除实例',
-            callback_data=f'delete_account_droplets?doc_id={account.doc_id}&step=1&pattern='
         )
     )
     
