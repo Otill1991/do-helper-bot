@@ -6,7 +6,7 @@ from .account_detail import account_detail
 from .manage_droplets import manage_droplets
 from .delete_account import delete_account
 from .batch_test_delete_accounts import batch_test_delete_accounts
-from .create_droplet import create_droplet, quick_create_droplet
+from .create_droplet import create_droplet, quick_create_droplet, batch_quick_create_droplet, batch_quick_create_confirm
 from .list_droplets import list_droplets, delete_account_droplets
 from .droplet_detail import droplet_detail
 from .droplet_actions import droplet_actions

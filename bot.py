@@ -27,6 +27,7 @@ command_dict = {
 
     '/cd': 'create_droplet',
     '/md': 'manage_droplets',
+    '/bqcd': 'batch_quick_create_droplet',
 }
 
 

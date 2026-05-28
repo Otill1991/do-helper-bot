@@ -1,6 +1,7 @@
 from typing import Union
 from time import sleep
 import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from telebot.types import (
     Message,
@@ -338,22 +339,22 @@ def confirm_create(call: CallbackQuery, data: dict):
 def quick_create_droplet(call: CallbackQuery, data: dict):
     doc_id = data['doc_id'][0]
     size = data.get('size', ['s-1vcpu-1gb'])[0]  # 默认1核1G
-    
+
     account = AccountsDB().get(doc_id=doc_id)
     t = '<b>快速创建实例</b>\n\n'
-    
+
     bot.edit_message_text(
         text=f'{t}获取地区中...',
         chat_id=call.from_user.id,
         message_id=call.message.message_id,
         parse_mode='HTML'
     )
-    
+
     try:
         manager = digitalocean.Manager(token=account['token'])
         regions = manager.get_all_regions()
         available_regions = [region.slug for region in regions if region.available]
-        
+
         if not available_regions:
             bot.edit_message_text(
                 text=f'{t}没有可用地区',
@@ -362,10 +363,10 @@ def quick_create_droplet(call: CallbackQuery, data: dict):
                 parse_mode='HTML'
             )
             return
-            
+
         selected_region = random.choice(available_regions)
         password = password_generator()
-        
+
         bot.edit_message_text(
             text=f'{t}正在创建实例...\n'
                  f'账号: <code>{account["email"]}</code>\n'
@@ -375,7 +376,7 @@ def quick_create_droplet(call: CallbackQuery, data: dict):
             message_id=call.message.message_id,
             parse_mode='HTML'
         )
-        
+
         droplet = digitalocean.Droplet(
             token=account['token'],
             name=f'quick-{selected_region}-{random.randint(1000, 9999)}',
@@ -385,13 +386,13 @@ def quick_create_droplet(call: CallbackQuery, data: dict):
             user_data=set_root_password_script(password)
         )
         droplet.create()
-        
+
         droplet_actions = droplet.get_actions()
         for action in droplet_actions:
             while action.status != 'completed':
                 sleep(3)
                 action.load()
-        
+
         ip_address = None
         for _ in range(10):
             droplet = digitalocean.Droplet.get_object(
@@ -403,7 +404,7 @@ def quick_create_droplet(call: CallbackQuery, data: dict):
             if ip_address:
                 break
             sleep(3)
-        
+
         markup = InlineKeyboardMarkup()
         markup.row(
             InlineKeyboardButton(
@@ -411,18 +412,18 @@ def quick_create_droplet(call: CallbackQuery, data: dict):
                 callback_data=f'droplet_detail?doc_id={doc_id}&droplet_id={droplet.id}'
             )
         )
-        
+
         status_text = f'{t}实例创建完成\n' \
                      f'账号: <code>{account["email"]}</code>\n' \
                      f'地区: <code>{localize_region(selected_region)}</code>\n' \
                      f'型号: <code>{size}</code>\n' \
                      f'密码: <code>{password}</code>'
-        
+
         if ip_address:
             status_text += f'\nIP: <code>{ip_address}</code>'
         else:
             status_text += '\nIP: <code>初始化中，请稍后在详情中查看</code>'
-        
+
         bot.edit_message_text(
             text=status_text,
             chat_id=call.from_user.id,
@@ -430,7 +431,7 @@ def quick_create_droplet(call: CallbackQuery, data: dict):
             parse_mode='HTML',
             reply_markup=markup
         )
-        
+
     except Exception as e:
         bot.edit_message_text(
             text=f'{t}创建失败: {str(e)}',
@@ -438,3 +439,93 @@ def quick_create_droplet(call: CallbackQuery, data: dict):
             message_id=call.message.message_id,
             parse_mode='HTML'
         )
+
+
+# 候选地区：纽约/新加坡/班加罗尔/澳大利亚
+_BATCH_REGIONS = ['nyc1', 'nyc2', 'nyc3', 'sgp1', 'blr1', 'syd1']
+_BATCH_SIZE = 's-1vcpu-512mb'
+_BATCH_COUNT = 3
+
+
+def batch_quick_create_droplet(d: Union[Message, CallbackQuery]):
+    accounts = AccountsDB().all()
+    markup = InlineKeyboardMarkup()
+    for account in accounts:
+        markup.add(
+            InlineKeyboardButton(
+                text=account['email'],
+                callback_data=f'batch_quick_create_confirm?doc_id={account.doc_id}'
+            )
+        )
+    bot.send_message(
+        text='<b>批量快速创建实例</b>\n\n'
+             f'将并发创建 {_BATCH_COUNT} 台 1核512M\n'
+             '随机地区（纽约/新加坡/班加罗尔/澳大利亚）\n\n'
+             '请选择账号',
+        chat_id=d.from_user.id,
+        parse_mode='HTML',
+        reply_markup=markup
+    )
+
+
+def batch_quick_create_confirm(call: CallbackQuery, data: dict):
+    doc_id = data['doc_id'][0]
+    account = AccountsDB().get(doc_id=doc_id)
+    selected_regions = random.choices(_BATCH_REGIONS, k=_BATCH_COUNT)
+
+    msg = bot.edit_message_text(
+        text='<b>批量快速创建实例</b>\n\n'
+             f'账号: <code>{account["email"]}</code>\n'
+             f'正在并发创建 {_BATCH_COUNT} 台实例，请稍候...',
+        chat_id=call.from_user.id,
+        message_id=call.message.message_id,
+        parse_mode='HTML'
+    )
+
+    def create_one(region):
+        password = password_generator()
+        name = f'batch-{region}-{random.randint(1000, 9999)}'
+        droplet = digitalocean.Droplet(
+            token=account['token'],
+            name=name,
+            region=region,
+            image='debian-12-x64',
+            size_slug=_BATCH_SIZE,
+            user_data=set_root_password_script(password)
+        )
+        droplet.create()
+        for action in droplet.get_actions():
+            while action.status != 'completed':
+                sleep(3)
+                action.load()
+        droplet.load()
+        return {
+            'region': region, 'name': name,
+            'password': password, 'ip': droplet.ip_address, 'id': droplet.id
+        }
+
+    results = []
+    with ThreadPoolExecutor(max_workers=_BATCH_COUNT) as executor:
+        futures = {executor.submit(create_one, r): r for r in selected_regions}
+        for future in as_completed(futures):
+            try:
+                results.append(future.result())
+            except Exception as e:
+                results.append({'region': futures[future], 'error': str(e)})
+
+    text = f'<b>批量创建完成</b>\n账号: <code>{account["email"]}</code>\n\n'
+    for i, r in enumerate(results, 1):
+        if 'error' in r:
+            text += f'{i}. {localize_region(r["region"])} 失败: {r["error"]}\n\n'
+        else:
+            text += (f'{i}. {localize_region(r["region"])}\n'
+                     f'   名称: <code>{r["name"]}</code>\n'
+                     f'   IP: <code>{r["ip"] or "初始化中"}</code>\n'
+                     f'   密码: <code>{r["password"]}</code>\n\n')
+
+    bot.edit_message_text(
+        text=text,
+        chat_id=call.from_user.id,
+        message_id=msg.message_id,
+        parse_mode='HTML'
+    )
