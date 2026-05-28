@@ -443,8 +443,16 @@ def quick_create_droplet(call: CallbackQuery, data: dict):
 
 # 候选地区：纽约/新加坡/班加罗尔/澳大利亚
 _BATCH_REGIONS = ['nyc1', 'nyc2', 'nyc3', 'sgp1', 'blr1', 'syd1']
-_BATCH_SIZE = 's-1vcpu-512mb'
 _BATCH_COUNT = 3
+
+
+def _get_min_size(token: str, region: str) -> str:
+    """取该地区1核最小内存的可用型号"""
+    sizes = digitalocean.Manager(token=token).get_all_sizes()
+    candidates = [s for s in sizes if region in s.regions and s.vcpus == 1]
+    if not candidates:
+        raise ValueError(f'{region} 无可用1核型号')
+    return min(candidates, key=lambda s: s.memory).slug
 
 
 def batch_quick_create_droplet(d: Union[Message, CallbackQuery]):
@@ -483,6 +491,7 @@ def batch_quick_create_confirm(call: CallbackQuery, data: dict):
     )
 
     def create_one(region):
+        size_slug = _get_min_size(account['token'], region)
         password = password_generator()
         name = f'batch-{region}-{random.randint(1000, 9999)}'
         droplet = digitalocean.Droplet(
@@ -490,7 +499,7 @@ def batch_quick_create_confirm(call: CallbackQuery, data: dict):
             name=name,
             region=region,
             image='debian-12-x64',
-            size_slug=_BATCH_SIZE,
+            size_slug=size_slug,
             user_data=set_root_password_script(password)
         )
         droplet.create()
@@ -500,7 +509,7 @@ def batch_quick_create_confirm(call: CallbackQuery, data: dict):
                 action.load()
         droplet.load()
         return {
-            'region': region, 'name': name,
+            'region': region, 'name': name, 'size': size_slug,
             'password': password, 'ip': droplet.ip_address, 'id': droplet.id
         }
 
@@ -518,7 +527,7 @@ def batch_quick_create_confirm(call: CallbackQuery, data: dict):
         if 'error' in r:
             text += f'{i}. {localize_region(r["region"])} 失败: {r["error"]}\n\n'
         else:
-            text += (f'{i}. {localize_region(r["region"])}\n'
+            text += (f'{i}. {localize_region(r["region"])} | {r["size"]}\n'
                      f'   名称: <code>{r["name"]}</code>\n'
                      f'   IP: <code>{r["ip"] or "初始化中"}</code>\n'
                      f'   密码: <code>{r["password"]}</code>\n\n')
