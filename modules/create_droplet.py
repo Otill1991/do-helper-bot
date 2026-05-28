@@ -507,10 +507,16 @@ def batch_quick_create_confirm(call: CallbackQuery, data: dict):
             while action.status != 'completed':
                 sleep(3)
                 action.load()
-        droplet.load()
+        ip = None
+        for _ in range(15):
+            droplet.load()
+            ip = droplet.ip_address
+            if ip:
+                break
+            sleep(3)
         return {
             'region': region, 'name': name, 'size': size_slug,
-            'password': password, 'ip': droplet.ip_address, 'id': droplet.id
+            'password': password, 'ip': ip, 'id': droplet.id
         }
 
     results = []
